@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hood Sonar — Urban Surface Scanner</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%2339d98a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 12a6 6 0 00-6-6"/><path d="M2.824 10.459a8 8 0 0010.717 10.717c.558-.276.623-1.012.183-1.452l-9.448-9.448c-.44-.44-1.176-.375-1.452.183"/><path d="M22 12A10 10 0 0012 2"/><path d="m9 15 4-4"/></svg>'>
+<style>
+/* Icons: Lucide (ISC license) — https://lucide.dev — inline SVG, no CDN.
+   traffic-light is our own drawing in the same style. */
+/* SECTION:styles */
+:root{
+  --bg:#0a0e14; --panel:#111722; --panel2:#0d131d; --line:#1d2735;
+  --txt:#c7d2e0; --dim:#6b7a90; --acc:#39d98a; --acc2:#4aa8ff;
+  --warn:#ffb454; --bad:#ff6b6b; --glow:rgba(57,217,138,.15);
+  --mono:'JetBrains Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:radial-gradient(1200px 600px at 80% -10%,#12203a 0%,var(--bg) 55%);
+  color:var(--txt); font:14px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:18px 16px 40px}
+svg.i{width:16px;height:16px;flex:none}
+/* header */
+header{display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:10px;
+  background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.logo{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#0f2a22,#0a1a2a);color:var(--acc);border:1px solid var(--line);
+  box-shadow:inset 0 0 18px var(--glow)}
+.logo svg.i{width:20px;height:20px}
+.h-title{font-size:17px;font-weight:650;letter-spacing:.2px}
+.h-sub{font-size:11.5px;color:var(--dim);font-family:var(--mono)}
+.h-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);
+  padding:6px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.dot.on{background:var(--acc);box-shadow:0 0 10px var(--acc)}
+.dot.scan{background:var(--acc2);box-shadow:0 0 10px var(--acc2);animation:pulse 1s infinite}
+.dot.err{background:var(--bad);box-shadow:0 0 10px var(--bad)}
+@keyframes pulse{50%{opacity:.4}}
+button{cursor:pointer;font:inherit;color:var(--txt);background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:8px 14px;transition:.15s;
+  display:inline-flex;align-items:center;gap:7px}
+button:hover{border-color:var(--acc);color:#fff}
+button.primary{background:linear-gradient(135deg,#123a2c,#0e2a3a);color:var(--acc);border-color:#1c4a3a}
+button.primary:hover{box-shadow:0 0 0 3px var(--glow)}
+button.icon{padding:8px 10px}
+button:disabled{opacity:.45;cursor:default}
+button.on{border-color:var(--acc);color:var(--acc)}
+/* statusbar */
+.statuswrap{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.actions{display:flex;gap:8px}
+.statusbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:11px;color:var(--dim)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel2)}
+.chip b{color:var(--txt);font-weight:500}
+.chip .pulse{animation:pulse 1.2s infinite}
+.chip.live{color:var(--acc)}
+.chip.live b{color:var(--acc)}
+.chip.warnchip{color:var(--warn)}
+.chip.warnchip b{color:var(--warn)}
+.chip svg.i{width:12px;height:12px}
+.chipbtn{cursor:pointer}
+.chipbtn:hover{border-color:var(--acc);color:var(--txt)}
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+  border-radius:12px;padding:11px 13px}
+.stat .v{font-size:22px;font-weight:680;font-family:var(--mono);letter-spacing:.5px}
+.stat .l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
+.stat .ic{float:right;color:var(--acc);opacity:.85;margin-top:2px}
+/* toolbar */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.search{flex:1;min-width:180px;display:flex;align-items:center;gap:8px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:8px 12px}
+.search svg.i{color:var(--dim)}
+.search input{flex:1;background:none;border:none;outline:none;color:var(--txt);font:inherit}
+select{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 12px;
+  color:var(--txt);font:inherit;outline:none}
+.srcchips{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.srcchips button{border:none;border-radius:0;padding:8px 12px;font-size:12.5px}
+.srcchips button+button{border-left:1px solid var(--line)}
+.srcchips button.on{background:#0e2a3a;color:var(--acc)}
+/* list */
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:38px 1.1fr 1.4fr 120px 60px 70px 70px 60px 50px;
+  align-items:center;gap:10px;padding:10px 14px;background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid var(--line);border-radius:11px;transition:.12s;cursor:pointer}
+.row:hover{border-color:#2a3a50;transform:translateY(-1px)}
+.row.sel{border-color:var(--acc2)}
+.row.fresh{animation:flash 1.2s ease-out 2}
+@keyframes flash{0%{border-color:var(--acc);box-shadow:0 0 0 3px var(--glow)}100%{box-shadow:none}}
+.ric{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:var(--panel2);border:1px solid var(--line);color:var(--acc)}
+.ric svg.i{width:17px;height:17px}
+.rmac{font-family:var(--mono);font-size:12.5px;color:var(--txt)}
+.rname{font-size:13px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rname .ven{color:var(--dim);font-weight:400;font-size:11px}
+.sig{display:flex;align-items:center;gap:7px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:16px}
+.bars i{width:4px;background:#2a3a50;border-radius:1px}
+.bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:9px}
+.bars i:nth-child(3){height:12px}.bars i:nth-child(4){height:16px}
+.bars i.on{background:var(--acc)}
+.dbm{font-family:var(--mono);font-size:11.5px;color:var(--dim);min-width:52px}
+.ch,.auth,.src,.last,.cnt{font-family:var(--mono);font-size:11.5px;color:var(--dim);text-align:right}
+.ch b,.auth b,.src b,.last b,.cnt b{color:var(--txt);font-weight:500}
+.src b{color:var(--acc2)}
+.empty{padding:40px;text-align:center;color:var(--dim);font-size:13px}
+.empty svg.i{width:30px;height:30px;display:block;margin:0 auto 10px;opacity:.5}
+/* drawer de detalle */
+.drawer{position:fixed;top:0;right:-380px;width:360px;max-width:94vw;height:100%;
+  background:linear-gradient(180deg,var(--panel),var(--panel2));border-left:1px solid var(--line);
+  box-shadow:-12px 0 40px rgba(0,0,0,.55);transition:right .22s ease;z-index:50;
+  display:flex;flex-direction:column}
+.drawer.open{right:0}
+.drawer-head{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid var(--line)}
+.drawer-head .ric{width:44px;height:44px}
+.drawer-head .ric svg.i{width:22px;height:22px}
+.dh-title{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sub{font-size:11px;color:var(--dim);font-family:var(--mono)}
+.drawer-body{padding:12px 16px 20px;overflow-y:auto;flex:1}
+.drow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;
+  border-bottom:1px dashed var(--line);font-size:12.5px}
+.drow .k{color:var(--dim);display:inline-flex;align-items:center;gap:7px}
+.drow .k svg.i{width:13px;height:13px}
+.drow .v{font-family:var(--mono);text-align:right;word-break:break-all}
+.copybtn{background:none;border:1px solid var(--line);border-radius:6px;padding:3px 6px;
+  color:var(--dim);cursor:pointer;margin-left:6px}
+.copybtn:hover{color:var(--acc);border-color:var(--acc)}
+.copybtn svg.i{width:11px;height:11px}
+.spk{margin:12px 0 4px}
+.spk svg{width:100%;height:64px;display:block}
+.spk .lbl{font-size:10.5px;color:var(--dim);font-family:var(--mono);margin-bottom:2px}
+details.raw{margin-top:12px;font-size:11px}
+details.raw summary{cursor:pointer;color:var(--dim);font-family:var(--mono)}
+details.raw pre{margin:8px 0 0;padding:10px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:8px;overflow-x:auto;font-family:var(--mono);font-size:10.5px;color:var(--acc2)}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10.5px;font-family:var(--mono);
+  background:var(--panel2);border:1px solid var(--line);color:var(--dim)}
+footer{margin-top:18px;text-align:center;color:var(--dim);font-size:11px;font-family:var(--mono)}
+@media(max-width:820px){
+  .row{grid-template-columns:38px 1fr 120px 60px;grid-auto-flow:dense}
+  .ch,.auth,.cnt,.last{display:none}
+  .drawer{width:94vw}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<!-- SECTION:markup -->
+<header>
+  <div class="logo" id="logo"></div>
+  <div>
+    <div class="h-title">Hood Sonar</div>
+    <div class="h-sub" id="fw">urban surface · wifi + ble</div>
+  </div>
+  <div class="h-right">
+    <div class="status"><span class="dot" id="dot"></span><span id="stxt">offline</span></div>
+    <button id="connect" class="primary"></button>
+  </div>
+</header>
+
+<div class="statuswrap">
+  <div class="statusbar" id="statusbar"></div>
+  <div class="actions">
+    <button class="icon" id="btnPause" title="Pause updates (p)"></button>
+    <button class="icon" id="btnCsv" title="Export CSV"></button>
+    <button class="icon" id="btnJson" title="Export JSON"></button>
+  </div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+  <div class="search" id="searchbox">
+    <input id="q" type="text" placeholder="search MAC, name, vendor…  ( / )" spellcheck="false">
+  </div>
+  <div class="srcchips" id="srcchips"></div>
+  <select id="filter"><option value="all">All</option></select>
+  <select id="sort">
+    <option value="rssi">Signal ↓</option>
+    <option value="last">Recent ↓</option>
+    <option value="cnt">Seen ↓</option>
+    <option value="name">Name A-Z</option>
+    <option value="type">Type A-Z</option>
+  </select>
+</div>
+
+<div class="list" id="list"></div>
+
+<footer id="foot">WebSerial · USB CDC · JSON lines · v1.1</footer>
+</div>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="ric" id="dh-ic"></div>
+    <div style="flex:1;min-width:0">
+      <div class="dh-title" id="dh-name">—</div>
+      <div class="dh-sub" id="dh-sub">—</div>
+    </div>
+    <button class="icon" id="dh-close" title="Close (Esc)"></button>
+  </div>
+  <div class="drawer-body" id="dh-body"></div>
+</aside>
+
+<script>
+'use strict';
+// SECTION:icons
+/* Inner SVG (24x24, stroke) — Lucide (ISC) + traffic-light propio */
+const P = {
+  'satellite-dish':'<path d="M18 12a6 6 0 00-6-6"/><path d="M2.824 10.459a8 8 0 0010.717 10.717c.558-.276.623-1.012.183-1.452l-9.448-9.448c-.44-.44-1.176-.375-1.452.183"/><path d="M22 12A10 10 0 0012 2"/><path d="m9 15 4-4"/>',
+  'radio-tower':'<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/>',
+  'wifi':'<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/>',
+  'bluetooth':'<path d="m7 7 10 10-5 5V2l5 5L7 17"/>',
+  'video':'<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
+  'smartphone':'<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+  'printer':'<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+  'lightbulb':'<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  'presentation':'<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>',
+  'building-2':'<path d="M10 12h4"/><path d="M10 8h4"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/>',
+  'tv':'<path d="m17 2-5 5-5-5"/><rect width="20" height="15" x="2" y="7" rx="2"/>',
+  'traffic-light':'<rect x="8" y="2" width="8" height="15" rx="2.5"/><circle cx="12" cy="5.6" r="1"/><circle cx="12" cy="9.5" r="1"/><circle cx="12" cy="13.4" r="1"/><path d="M12 17v3"/><path d="M8 22h8"/>',
+  'lamp':'<path d="M12 12v6"/><path d="M4.077 10.615A1 1 0 0 0 5 12h14a1 1 0 0 0 .923-1.385l-3.077-7.384A2 2 0 0 0 15 2H9a2 2 0 0 0-1.846 1.23Z"/><path d="M8 20a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z"/>',
+  'square-parking':'<path d="M9 12h4a2 2 0 0 0 0-4H9.5a.5.5 0 0 0-.5.5V16"/><rect width="18" height="18" x="3" y="3" rx="2"/>',
+  'router':'<rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6.01 18H6"/><path d="M10.01 18H10"/><path d="M15 10v4"/><path d="M17.84 7.17a4 4 0 0 0-5.66 0"/><path d="M20.66 4.34a8 8 0 0 0-11.31 0"/>',
+  'cpu':'<path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
+  'circle-help':'<circle cx="12" cy="12" r="10"/><path d="M9 9.5a3 2.5 0 016 0c0 2-2 2-3 3.5"/><path d="M12 17h.01"/>',
+  'search':'<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',
+  'plug':'<path d="M12 22v-5"/><path d="M15 8V2"/><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z"/><path d="M9 8V2"/>',
+  'power':'<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+  'pause':'<rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/>',
+  'play':'<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>',
+  'download':'<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  'copy':'<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  'x':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  'activity':'<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>',
+  'clock':'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  'eye':'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  'lock':'<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  'hash':'<line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/>',
+  'zap':'<path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/>',
+  'rotate-cw':'<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  'triangle-alert':'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  'info':'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  'unplug':'<path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/>',
+  'gauge':'<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+};
+function svgIcon(name, cls){
+  return `<svg class="i ${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]||P['circle-help']}</svg>`;
+}
+
+const CATS = {
+  camera:['video','Camera'], phone:['smartphone','Phone'],
+  printer:['printer','Printer'], hotspot:['wifi','Hotspot'],
+  led:['lightbulb','LED'], signage:['presentation','Signage'],
+  facade:['building-2','Facade'], screen:['tv','Screen'],
+  traffic:['traffic-light','Traffic light'], streetlight:['lamp','Street light'],
+  parking:['square-parking','Parking'], router:['router','Router'],
+  iot:['cpu','IoT'], ble:['bluetooth','BLE'],
+  unknown:['circle-help','Unknown'],
+};
+
+// SECTION:state
+const state = {
+  devices: {},          // "src:mac" -> device
+  connected: false,
+  connecting: false,
+  paused: false,
+  pausedCount: 0,
+  src: 'all',
+  filter: 'all',
+  sort: 'rssi',
+  q: '',
+  hello: null,
+  board: null,          // from stat: {up, heap, devs, wifi, ble, wall}
+  sel: null,            // selected device key (drawer)
+  session: { snaps: 0, lines: 0, errors: 0, newDevs: 0, started: 0 },
+};
+let port = null, reader = null, reconnectTries = 0, reconnectTimer = null;
+
+// SECTION:logic
+function iconFor(cat){ const c = CATS[cat] || CATS.unknown; return c[0]; }
+function catName(cat){ const c = CATS[cat] || CATS.unknown; return c[1]; }
+function devKey(d){ return (d.src || 'wifi') + ':' + d.mac; }
+function rssiBars(rssi){
+  if (rssi >= -55) return 4;
+  if (rssi >= -65) return 3;
+  if (rssi >= -75) return 2;
+  if (rssi >= -85) return 1;
+  return 0;
+}
+function nowMs(){ return Date.now(); }
+// Escape for innerHTML. Names come from the air (SSIDs / BLE names are
+// attacker-controlled), so everything is escaped.
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtUptime(ms){
+  const s = Math.floor(ms/1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), ss = s%60;
+  return (h? h+':' : '') + String(m).padStart(2,'0') + ':' + String(ss).padStart(2,'0');
+}
+function fmtKb(b){ return (b/1024).toFixed(0) + ' KB'; }
+function fmtAgo(wall){
+  const s = Math.max(0, Math.round((nowMs() - wall)/1000));
+  if (s < 60) return s + 's';
+  return Math.floor(s/60) + 'm' + String(s%60).padStart(2,'0') + 's';
+}
+
+function applyHello(h){
+  state.hello = h;
+  if (h.fw) el.fw.textContent = 'urban surface · ' + h.fw;
+  state.session.started = nowMs();
+  renderStatusbar();
+}
+function applyStat(s){
+  state.board = { up: s.up||0, heap: s.heap||0, devs: s.devs||0,
+                  wifi: s.wifi?1:0, ble: s.ble?1:0, wall: nowMs() };
+  renderStatusbar();
+}
+function applySnap(s){
+  const arr = s.d || [];
+  const now = nowMs();
+  const seen = new Set();
+  let freshCount = 0;
+  for (const d of arr){
+    if (!d || !d.mac) continue;
+    const key = devKey(d);
+    seen.add(key);
+    const prev = state.devices[key];
+    if (!prev) { freshCount++; d.__fresh = true; }
+    state.devices[key] = {
+      mac: d.mac, key,
+      type: d.type || 'unknown',
+      name: d.name || (prev ? prev.name : ''),
+      rssi: (d.rssi != null) ? d.rssi : (prev ? prev.rssi : -90),
+      ch: (d.ch != null) ? d.ch : (prev ? prev.ch : 0),
+      auth: d.auth ?? (prev ? prev.auth : ''),
+      vendor: d.vendor ?? (prev ? prev.vendor : ''),
+      src: d.src || (prev ? prev.src : 'wifi'),
+      last: (d.last != null) ? d.last : (prev ? prev.last : now),
+      cnt: (d.cnt != null) ? d.cnt : (prev ? prev.cnt + 1 : 1),
+      wall: now,
+      wallFirst: prev ? prev.wallFirst : now,
+      freshUntil: (d.__fresh) ? now + 3000 : (prev ? prev.freshUntil : 0),
+      hist: (prev ? prev.hist : []).concat([{ t: now, r: (d.rssi != null) ? d.rssi : (prev ? prev.rssi : -90) }]).slice(-60),
+    };
+  }
+  // drop devices not confirmed for ~9 s (wall-clock, device-independent)
+  const cutoff = nowMs() - 9000;
+  for (const k in state.devices){
+    if (!seen.has(k) && state.devices[k].wall < cutoff) delete state.devices[k];
+  }
+  state.session.snaps++;
+  state.session.newDevs = freshCount;
+  render();
+}
+
+function parseLine(line){
+  line = line.trim();
+  state.session.lines++;
+  // Console logs (Wi-Fi/BLE) can be interleaved with our JSON on the same line,
+  // so find the first '{' that yields a valid object and parse from there.
+  let i = line.indexOf('{');
+  while (i >= 0){
+    try {
+      const j = JSON.parse(line.slice(i));
+      if (j.t === 'hello') applyHello(j);
+      else if (j.t === 'snap') applySnap(j);
+      else if (j.t === 'stat') applyStat(j);
+      return;
+    } catch(e){
+      i = line.indexOf('{', i + 1);
+    }
+  }
+  if (line.includes('{') && line.includes('}')) state.session.errors++;
+}
+
+// ---- serial ----
+async function cleanupPort(){
+  if (reader){ try { await reader.cancel(); } catch(e){} try { reader.releaseLock(); } catch(e){} reader = null; }
+  if (port){ try { await port.close(); } catch(e){} port = null; }
+  state.connected = false;
+  setConn('off', 'offline');
+}
+
+async function connect(){
+  if (state.connected || state.connecting) return;
+  if (window.__mock){
+    state.connected = true;
+    setConn('on', 'connected');
+    await mockFeed();
+    return;
+  }
+  if (!navigator.serial){
+    setConn('err', 'no WebSerial (use Chrome/Edge)');
+    return;
+  }
+  state.connecting = true;
+  setConn('scan', 'connecting…');
+  try {
+    if (port){ await port.open({ baudRate: 115200 }); }
+    else { port = await navigator.serial.requestPort(); await port.open({ baudRate: 115200 }); }
+  } catch(e){
+    state.connecting = false;
+    setConn('off', 'offline');
+    return;
+  }
+  state.connecting = false;
+  state.connected = true;
+  state.userDisconnect = false;
+  reconnectTries = 0;
+  setConn('on', 'connected');
+  readLoop();
+}
+
+async function readLoop(){
+  reader = port.readable.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  try {
+    while (true){
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n')) >= 0){
+        parseLine(buf.slice(0, idx));
+        buf = buf.slice(idx + 1);
+      }
+    }
+  } catch(e){ /* port closed or cancelled */ }
+  await cleanupPort();
+  // Auto-reconnect: reopening the SAME SerialPort needs no user gesture
+  // (only the initial requestPort does).
+  scheduleReconnect();
+}
+
+function scheduleReconnect(){
+  if (window.__mock || !navigator.serial) return;
+  if (state.userDisconnect || reconnectTries >= 6 || !port){
+    setConn('off', 'offline');
+    return;
+  }
+  reconnectTries++;
+  setConn('scan', `reconnecting (${reconnectTries}/6)…`);
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(async ()=>{
+    try {
+      await port.open({ baudRate: 115200 });
+      state.connected = true;
+      setConn('on', 'connected');
+      readLoop();
+    } catch(e){
+      scheduleReconnect();
+    }
+  }, 2000);
+}
+
+async function disconnect(){
+  state.userDisconnect = true;
+  clearTimeout(reconnectTimer);
+  reconnectTries = 6; // stop auto-retry
+  if (state.connecting){ state.connecting = false; }
+  await cleanupPort();
+}
+
+async function mockFeed(){
+  parseLine(JSON.stringify({ t:'hello', id:'18:8b:0e:39:8d:48', fw:'v1.1', heap:107944, wifi:1, ble:1 }));
+  parseLine(JSON.stringify({ t:'stat', up:184000, heap:107944, devs:6, wifi:1, ble:1 }));
+  const mk = (mac,type,name,rssi,ch,auth,vendor,src,cnt)=>
+    ({mac,type,name,rssi,ch,auth,vendor,src,last:nowMs(),cnt});
+  const snaps = [
+    [ mk('aa:bb:cc:01:02:03','camera','Hikvision-01',-52,6,'WPA2','Hikvision','wifi',5),
+      mk('aa:bb:cc:04:05:06','traffic','GreenLight-01',-58,1,'WPA2','GreenLight','wifi',3),
+      mk('aa:bb:cc:07:08:09','led','LED-Facade-2',-64,11,'WPA2_WPA3','Leyard','wifi',2),
+      mk('de:ad:be:ef:00:01','streetlight','Streetlight-7',-70,9,'OPEN','Philips','wifi',4) ],
+    [ mk('aa:bb:cc:01:02:03','camera','Hikvision-01',-50,6,'WPA2','Hikvision','wifi',6),
+      mk('aa:bb:cc:04:05:06','traffic','GreenLight-01',-57,1,'WPA2','GreenLight','wifi',4),
+      mk('de:ad:be:ef:00:02','phone','iPhone-urban',-48,0,'','Apple','ble',2),
+      mk('de:ad:be:ef:00:03','parking','Parking-Sensor',-66,0,'','Bosch','ble',3),
+      mk('aa:bb:cc:07:08:09','led','LED-Facade-2',-63,11,'WPA2_WPA3','Leyard','wifi',3) ],
+  ];
+  for (const d of snaps){
+    parseLine(JSON.stringify({ t:'snap', d, n:d.length }));
+    await new Promise(r=>setTimeout(r,120));
+  }
+}
+
+// ---- export ----
+function exportRows(fmt){
+  let ds = Object.values(state.devices);
+  const q = state.q.toLowerCase();
+  if (state.filter !== 'all') ds = ds.filter(d=>d.type===state.filter);
+  if (state.src !== 'all') ds = ds.filter(d=>d.src===state.src);
+  if (q) ds = ds.filter(d=>
+    (d.mac||'').toLowerCase().includes(q) ||
+    (d.name||'').toLowerCase().includes(q) ||
+    (d.vendor||'').toLowerCase().includes(q));
+  const stamp = new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+  if (fmt === 'json'){
+    const clean = ds.map(d=>({mac:d.mac,type:d.type,name:d.name,vendor:d.vendor,
+      rssi:d.rssi,channel:d.ch,auth:d.auth,source:d.src,count:d.cnt,
+      first_seen_age_s:Math.round((nowMs()-d.wallFirst)/1000),last_seen_age_s:Math.round((nowMs()-d.wall)/1000)}));
+    downloadBlob(`scanner-${stamp}.json`, JSON.stringify(clean, null, 2), 'application/json');
+  } else {
+    const csvCell = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+    const head = ['mac','type','name','vendor','rssi','ch','auth','src','cnt','first_seen_s','last_seen_s'];
+    const rows = ds.map(d=>[d.mac,d.type,d.name,d.vendor,d.rssi,d.ch,d.auth,d.src,d.cnt,
+      Math.round((nowMs()-d.wallFirst)/1000), Math.round((nowMs()-d.wall)/1000)]);
+    const csv = [head, ...rows].map(r=>r.map(csvCell).join(',')).join('\n');
+    downloadBlob(`scanner-${stamp}.csv`, csv, 'text/csv');
+  }
+}
+function downloadBlob(name, text, mime){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+
+// ---- drawer ----
+function openDrawer(key){
+  state.sel = key;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer').setAttribute('aria-hidden','false');
+  renderDrawer();
+}
+function closeDrawer(){
+  state.sel = null;
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer').setAttribute('aria-hidden','true');
+  renderList();
+}
+async function copyText(t, btn){
+  try { await navigator.clipboard.writeText(t); } catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch(_){} ta.remove();
+  }
+  if (btn){ btn.innerHTML = svgIcon('power'); btn.title = 'Copied!'; setTimeout(()=>{ btn.innerHTML = svgIcon('copy'); btn.title = 'Copy'; }, 1200); }
+}
+function sparkline(hist){
+  const pts = hist.filter(h=>h.r != null);
+  if (pts.length < 2) return '<div class="lbl">signal: waiting for more samples…</div>';
+  const W = 320, H = 56, pad = 4;
+  const rmin = Math.min(-90, ...pts.map(p=>p.r)), rmax = Math.max(-40, ...pts.map(p=>p.r));
+  const t0 = pts[0].t, t1 = pts[pts.length-1].t || (t0+1);
+  const x = t => pad + (t - t0) / Math.max(1,(t1 - t0)) * (W - 2*pad);
+  const y = r => H - pad - (r - rmin) / Math.max(1,(rmax - rmin)) * (H - 2*pad);
+  const line = pts.map(p=>`${x(p.t).toFixed(1)},${y(p.r).toFixed(1)}`).join(' ');
+  const area = `${pad},${H-pad} ${line} ${x(pts[pts.length-1].t).toFixed(1)},${H-pad}`;
+  return `<div class="lbl">signal · last ${pts.length} samples</div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <polygon points="${area}" fill="rgba(57,217,138,.12)"/>
+      <polyline points="${line}" fill="none" stroke="#39d98a" stroke-width="1.5"/>
+    </svg>`;
+}
+function renderDrawer(){
+  const body = document.getElementById('dh-body');
+  const d = state.sel ? state.devices[state.sel] : null;
+  if (!d){
+    document.getElementById('dh-name').textContent = '—';
+    document.getElementById('dh-sub').textContent = 'device not visible';
+    document.getElementById('dh-ic').innerHTML = svgIcon('circle-help');
+    body.innerHTML = `<div class="empty" style="padding:24px">The device is no longer in range.</div>`;
+    return;
+  }
+  document.getElementById('dh-name').textContent = d.name || '(no name)';
+  document.getElementById('dh-sub').textContent = `${catName(d.type)} · ${d.src}`;
+  document.getElementById('dh-ic').innerHTML = svgIcon(iconFor(d.type));
+  const rows = [
+    ['hash','MAC', esc(d.mac) + `<button class="copybtn" data-copy="${esc(d.mac)}" title="Copy">${svgIcon('copy')}</button>`],
+    ['info','Type', esc(catName(d.type))],
+    ['info','Vendor', esc(d.vendor || '—')],
+    ['bluetooth','Source', esc(d.src)],
+    ['lock','Auth', esc(d.auth || '—')],
+    ['hash','Channel', d.ch ? d.ch : '—'],
+    ['activity','RSSI', `${d.rssi} dBm`],
+    ['eye','Seen', `${d.cnt} times`],
+    ['clock','First seen', `${fmtAgo(d.wallFirst)} ago`],
+    ['clock','Last seen', `${fmtAgo(d.wall)} ago`],
+  ];
+  body.innerHTML = `
+    <div class="drow"><span class="k">${svgIcon('activity')} signal</span><span class="v"><span class="bars">${[1,2,3,4].map(i=>`<i class="${i<=rssiBars(d.rssi)?'on':''}"></i>`).join('')}</span></span></div>
+    ${rows.map(r=>`<div class="drow"><span class="k">${svgIcon(r[0])} ${r[1]}</span><span class="v">${r[2]}</span></div>`).join('')}
+    <div class="spk">${sparkline(d.hist)}</div>
+    <details class="raw"><summary>Raw JSON</summary><pre>${esc(JSON.stringify({mac:d.mac,type:d.type,name:d.name,vendor:d.vendor,rssi:d.rssi,ch:d.ch,auth:d.auth,src:d.src,cnt:d.cnt}, null, 1))}</pre></details>`;
+  body.querySelectorAll('.copybtn').forEach(b=>{
+    b.addEventListener('click', ()=>copyText(b.dataset.copy, b));
+  });
+  document.querySelectorAll('#list .row').forEach(r=>{
+    r.classList.toggle('sel', r.dataset.key === state.sel);
+  });
+}
+
+// SECTION:ui
+const el = {};
+function setConn(cls, txt){
+  const dot = document.getElementById('dot');
+  const stxt = document.getElementById('stxt');
+  if (dot){ dot.className = 'dot ' + cls; }
+  if (stxt){ stxt.textContent = txt; }
+}
+function updateBtn(){
+  const active = state.connected || state.connecting;
+  el.connect.innerHTML = svgIcon(active ? 'power' : 'plug') + (active ? ' Disconnect' : ' Connect');
+}
+function renderStatusbar(){
+  const s = state.session;
+  const chips = [];
+  if (state.paused) chips.push(`<span class="chip warnchip">${svgIcon('pause')} <b>paused</b> (+${state.pausedCount})</span>`);
+  if (state.board){
+    chips.push(`<span class="chip">${svgIcon('clock')} board <b>${fmtUptime(state.board.up)}</b></span>`);
+    chips.push(`<span class="chip">${svgIcon('zap')} heap <b>${fmtKb(state.board.heap)}</b></span>`);
+    chips.push(`<span class="chip ${state.board.wifi?'live':''}">${svgIcon('wifi')} wifi ${state.board.wifi?'<span class="pulse">●</span>':'—'}</span>`);
+    chips.push(`<span class="chip ${state.board.ble?'live':''}">${svgIcon('bluetooth')} ble ${state.board.ble?'<span class="pulse">●</span>':'—'}</span>`);
+  }
+  if (s.started){
+    chips.push(`<span class="chip">${svgIcon('eye')} snaps <b>${s.snaps}</b></span>`);
+    if (s.newDevs) chips.push(`<span class="chip live">${svgIcon('play')} <b>${s.newDevs} new</b></span>`);
+    if (s.errors) chips.push(`<span class="chip warnchip">${svgIcon('triangle-alert')} <b>${s.errors}</b> corrupt lines</span>`);
+  }
+  el.statusbar.innerHTML = chips.join('');
+}
+function renderStats(){
+  const ds = Object.values(state.devices);
+  const total = ds.length;
+  const wifi = ds.filter(d=>d.src==='wifi').length;
+  const ble = ds.filter(d=>d.src==='ble').length;
+  const byType = {};
+  for (const d of ds) byType[d.type] = (byType[d.type]||0)+1;
+  const top = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  let html = `
+    <div class="stat"><span class="ic">${svgIcon('radio-tower')}</span>
+      <div class="v">${total}</div><div class="l">devices</div></div>
+    <div class="stat"><span class="ic">${svgIcon('wifi')}</span>
+      <div class="v">${wifi}</div><div class="l">wifi</div></div>
+    <div class="stat"><span class="ic">${svgIcon('bluetooth')}</span>
+      <div class="v">${ble}</div><div class="l">ble</div></div>`;
+  for (const [t,n] of top){
+    html += `<div class="stat"><span class="ic">${svgIcon(iconFor(t))}</span>
+      <div class="v">${n}</div><div class="l">${catName(t).toLowerCase()}</div></div>`;
+  }
+  el.stats.innerHTML = html;
+}
+function renderList(){
+  let ds = Object.values(state.devices);
+  const q = state.q.toLowerCase();
+  if (state.filter !== 'all') ds = ds.filter(d=>d.type===state.filter);
+  if (state.src !== 'all') ds = ds.filter(d=>d.src===state.src);
+  if (q) ds = ds.filter(d=>
+    (d.mac||'').toLowerCase().includes(q) ||
+    (d.name||'').toLowerCase().includes(q) ||
+    (d.vendor||'').toLowerCase().includes(q));
+  const s = state.sort;
+  ds.sort((a,b)=>{
+    if (s==='rssi') return (b.rssi||-99)-(a.rssi||-99);
+    if (s==='last') return (b.wall||0)-(a.wall||0);
+    if (s==='cnt') return (b.cnt||0)-(a.cnt||0);
+    if (s==='name') return (a.name||'').localeCompare(b.name||'');
+    if (s==='type') return catName(a.type||'').localeCompare(catName(b.type||''));
+    return 0;
+  });
+  if (!ds.length){
+    el.list.innerHTML = `<div class="empty">${svgIcon('radio-tower')}
+      ${state.connected ? 'No devices in range' : 'Connect the ESP32-C3 to see devices'}</div>`;
+    return;
+  }
+  const now = nowMs();
+  const rows = ds.map(d=>{
+    const bars = rssiBars(d.rssi);
+    const barHtml = [1,2,3,4].map(i=>`<i class="${i<=bars?'on':''}"></i>`).join('');
+    const ch = d.ch ? d.ch : '—';
+    const auth = d.auth || '—';
+    const ven = d.vendor ? `<span class="ven"> · ${esc(d.vendor)}</span>` : '';
+    const ago = Math.max(0, Math.round((now - d.wall)/1000));
+    const fresh = d.freshUntil > now;
+    return `<div class="row ${fresh?'fresh':''} ${state.sel===d.key?'sel':''}" data-key="${esc(d.key)}" title="View detail">
+      <div class="ric">${svgIcon(iconFor(d.type))}</div>
+      <div class="rmac">${esc(d.mac)}</div>
+      <div class="rname">${esc(d.name) || '—'}${ven}</div>
+      <div class="sig"><div class="bars">${barHtml}</div><span class="dbm">${d.rssi} dBm</span></div>
+      <div class="ch">ch <b>${ch}</b></div>
+      <div class="auth"><b>${esc(auth)}</b></div>
+      <div class="src"><b>${d.src}</b></div>
+      <div class="last"><b>${ago}s</b></div>
+      <div class="cnt"><b>${d.cnt}</b></div>
+    </div>`;
+  }).join('');
+  el.list.innerHTML = rows;
+  el.list.querySelectorAll('.row').forEach(r=>{
+    r.addEventListener('click', ()=>openDrawer(r.dataset.key));
+  });
+}
+let filterKey = null;
+function refreshFilterOptions(){
+  const types = new Set(Object.values(state.devices).map(d=>d.type));
+  const key = [...types].sort().join(',');
+  // rebuild only when the set of types changes, so an open dropdown is not
+  // reset on every 2 s snapshot
+  if (key === filterKey) return;
+  filterKey = key;
+  const cur = state.filter;
+  let html = '<option value="all">All</option>';
+  const order = ['camera','traffic','led','signage','facade','screen','streetlight','parking','hotspot','router','printer','phone','iot','ble','unknown'];
+  for (const t of order){
+    if (types.has(t)) html += `<option value="${t}" ${t===cur?'selected':''}>${catName(t)}</option>`;
+  }
+  el.filter.innerHTML = html;
+  if (![...el.filter.options].some(o=>o.value===cur)) { state.filter='all'; el.filter.value='all'; }
+}
+function renderSrcChips(){
+  const defs = [['all','All'],['wifi','WiFi'],['ble','BLE']];
+  el.srcchips.innerHTML = defs.map(([v,l])=>
+    `<button data-src="${v}" class="${state.src===v?'on':''}">${l}</button>`).join('');
+  el.srcchips.querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      state.src = b.dataset.src; savePrefs();
+      renderSrcChips(); renderList();
+    });
+  });
+}
+function render(){
+  renderStats();
+  refreshFilterOptions();
+  renderList();
+  renderStatusbar();
+  if (state.sel) renderDrawer();
+}
+function togglePause(){
+  state.paused = !state.paused;
+  el.btnPause.innerHTML = svgIcon(state.paused ? 'play' : 'pause');
+  el.btnPause.classList.toggle('on', state.paused);
+  el.btnPause.title = state.paused ? 'Resume (p)' : 'Pause updates (p)';
+  if (!state.paused) state.pausedCount = 0;
+  renderStatusbar();
+}
+
+// SECTION:init
+function init(){
+  el.logo = document.getElementById('logo');
+  el.fw = document.getElementById('fw');
+  el.connect = document.getElementById('connect');
+  el.statusbar = document.getElementById('statusbar');
+  el.stats = document.getElementById('stats');
+  el.q = document.getElementById('q');
+  el.srcchips = document.getElementById('srcchips');
+  el.filter = document.getElementById('filter');
+  el.sort = document.getElementById('sort');
+  el.list = document.getElementById('list');
+  el.btnPause = document.getElementById('btnPause');
+  el.btnCsv = document.getElementById('btnCsv');
+  el.btnJson = document.getElementById('btnJson');
+  el.searchbox = document.getElementById('searchbox');
+  el.searchbox.insertAdjacentHTML('afterbegin', svgIcon('search'));
+  el.logo.innerHTML = svgIcon('satellite-dish');
+  document.getElementById('dh-close').innerHTML = svgIcon('x');
+
+  // restore prefs
+  try {
+    const p = JSON.parse(localStorage.getItem('scanner.prefs')||'{}');
+    if (p.filter) state.filter = p.filter;
+    if (p.sort) state.sort = p.sort;
+    if (p.q) state.q = p.q;
+    if (p.src) state.src = p.src;
+  } catch(e){}
+  el.filter.value = state.filter;
+  el.sort.value = state.sort;
+  el.q.value = state.q;
+
+  el.connect.addEventListener('click', async ()=>{
+    if (state.connected || state.connecting){ await disconnect(); }
+    else { await connect(); }
+    updateBtn();
+  });
+  el.btnPause.addEventListener('click', togglePause);
+  el.btnCsv.addEventListener('click', ()=>exportRows('csv'));
+  el.btnJson.addEventListener('click', ()=>exportRows('json'));
+  document.getElementById('dh-close').addEventListener('click', closeDrawer);
+  el.q.addEventListener('input', ()=>{ state.q = el.q.value; savePrefs(); renderList(); });
+  el.filter.addEventListener('change', ()=>{ state.filter = el.filter.value; savePrefs(); renderList(); });
+  el.sort.addEventListener('change', ()=>{ state.sort = el.sort.value; savePrefs(); renderList(); });
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape') closeDrawer();
+    if (e.key === '/' && document.activeElement !== el.q){ e.preventDefault(); el.q.focus(); }
+    if ((e.key === 'p' || e.key === 'P') && document.activeElement !== el.q
+        && document.activeElement.tagName !== 'SELECT') togglePause();
+  });
+
+  updateBtn();
+  renderSrcChips();
+  render();
+}
+function savePrefs(){
+  try { localStorage.setItem('scanner.prefs', JSON.stringify({filter:state.filter,sort:state.sort,q:state.q,src:state.src})); } catch(e){}
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

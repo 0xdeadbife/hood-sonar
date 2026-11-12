@@ -1,0 +1,16 @@
+# Host tests: build each tests/test_*.c against the firmware library sources
+# with plain gcc and run them (no ESP-IDF, no hardware needed).
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host:
+    name: host tests (gcc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tests/run.sh

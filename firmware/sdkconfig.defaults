@@ -1,0 +1,23 @@
+# --- Target ---
+CONFIG_IDF_TARGET="esp32c3"
+
+# --- Console on native USB-Serial/JTAG (no CP2102/CH340) ---
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# --- Wi-Fi (scan mode) ---
+CONFIG_ESP_WIFI_ENABLED=y
+# Tuned down for 400 KB SRAM (no PSRAM): fewer RX/TX buffers
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_TX_BUFFER_NUM=8
+
+# --- Bluetooth LE: NimBLE (lighter than Bluedroid on C3) ---
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_CONTROLLER_ENABLED=y
+
+# --- FreeRTOS ---
+CONFIG_FREERTOS_HZ=100
+
+# --- Log (INFO default; protocol lines go via printf) ---
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
